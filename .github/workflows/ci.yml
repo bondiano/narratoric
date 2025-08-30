@@ -33,6 +33,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          opam update
           opam install . --deps-only --with-test --with-dev-setup --with-doc -y
           opam install ocamlformat odoc -y
 
@@ -75,6 +76,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          opam update
           opam install . --deps-only --with-dev-setup -y
           opam install ocamlformat -y
 
@@ -102,6 +104,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          opam update
           opam install . --deps-only --with-test --with-dev-setup -y
           opam install bisect_ppx stdio base -y
 
