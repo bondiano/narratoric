@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        ocaml-compiler:
+          - "5.3.x"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: true
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only --with-test --with-dev-setup -y
+
+      - name: Check formatting
+        run: |
+          opam exec -- dune build @fmt
+
+      - name: Build project
+        run: |
+          opam exec -- dune build
+
+      - name: Run tests
+        run: |
+          opam exec -- dune test
+
+      - name: Build documentation
+        run: |
+          opam exec -- dune build @doc
+
+      - name: Upload documentation artifacts
+        if: matrix.os == 'ubuntu-latest' && matrix.ocaml-compiler == '5.3.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc
+          path: _build/default/_doc/_html/
+
+  lint:
+    name: Lint and Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+          dune-cache: true
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only --with-dev-setup -y
+
+      - name: Check formatting
+        run: |
+          opam exec -- dune build @fmt
+
+      - name: Run opam lint
+        run: |
+          opam lint narratoric.opam || true
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+          dune-cache: true
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only --with-test -y
+          opam install bisect_ppx -y
+
+      - name: Build and test with coverage
+        run: |
+          opam exec -- dune test --instrument-with bisect_ppx --force
+
+      - name: Generate coverage report
+        run: |
+          opam exec -- bisect-ppx-report summary --coverage-path=_build/default/
+        continue-on-error: true

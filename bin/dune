@@ -1,0 +1,4 @@
+(executable
+ (public_name narratoric)
+ (name main)
+ (libraries base stdio narratoric))

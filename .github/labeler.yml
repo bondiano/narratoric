@@ -1,0 +1,40 @@
+# Add 'documentation' label to any change in docs or markdown files
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'docs/**'
+
+# Add 'tests' label to any change in test files
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'test/**'
+      - '**/*test*.ml'
+
+# Add 'ci' label to any CI/CD changes
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+
+# Add 'dependencies' label to dependency changes
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'dune-project'
+      - '*.opam'
+      - '.opam-switch-create'
+
+# Add 'engine' label to engine changes
+engine:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'lib/engine.ml'
+      - 'lib/engine.mli'
+
+# Add 'formatting' label to formatting changes
+formatting:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.ocamlformat'

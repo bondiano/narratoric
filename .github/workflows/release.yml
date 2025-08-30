@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Release Binary
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: linux-amd64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: macos-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows
+            suffix: windows-amd64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+          dune-cache: true
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only -y
+
+      - name: Build release binary
+        run: |
+          opam exec -- dune build --release
+          
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp _build/default/bin/main.exe dist/narratoric-${{ matrix.suffix }} || \
+          cp _build/default/bin/main.bc dist/narratoric-${{ matrix.suffix }} || \
+          cp _build/default/bin/main.native dist/narratoric-${{ matrix.suffix }}
+          chmod +x dist/narratoric-${{ matrix.suffix }}
+          tar -czf narratoric-${{ matrix.suffix }}.tar.gz -C dist .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: narratoric-${{ matrix.suffix }}
+          path: narratoric-${{ matrix.suffix }}.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-opam:
+    name: Publish to opam
+    needs: create-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+
+      - name: Prepare opam package
+        run: |
+          echo "Preparing package for opam repository submission"
+          echo "This step would typically:"
+          echo "1. Update the opam file with the release URL"
+          echo "2. Create a PR to opam-repository"
+          echo "Note: Manual submission may be required"

@@ -1,0 +1,61 @@
+name: Update Dependencies
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-deps:
+    name: Update OCaml Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+          dune-cache: true
+
+      - name: Update opam packages
+        run: |
+          opam update
+          opam upgrade --yes
+
+      - name: Update dependencies in dune-project
+        run: |
+          opam install . --deps-only --with-dev-setup -y
+          opam exec -- dune build
+
+      - name: Check for changes
+        id: verify_diff
+        run: |
+          git diff --quiet . || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.verify_diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update dependencies'
+          title: 'chore: update OCaml dependencies'
+          body: |
+            ## 🤖 Automated dependency update
+            
+            This PR updates the OCaml dependencies to their latest versions.
+            
+            ### Changes
+            - Updated opam packages
+            - Regenerated lock files if any
+            
+            Please review and merge if all tests pass.
+          branch: update-dependencies
+          delete-branch: true
