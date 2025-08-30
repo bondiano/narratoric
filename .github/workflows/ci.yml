@@ -102,8 +102,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          opam install . --deps-only --with-test -y
-          opam install bisect_ppx -y
+          opam install . --deps-only --with-test --with-dev-setup -y
+          opam install bisect_ppx stdio base -y
 
       - name: Build and test with coverage
         run: |
