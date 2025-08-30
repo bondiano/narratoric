@@ -14,7 +14,7 @@ jobs:
   update-deps:
     name: Update OCaml Dependencies
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -49,13 +49,13 @@ jobs:
           title: 'chore: update OCaml dependencies'
           body: |
             ## 🤖 Automated dependency update
-            
+
             This PR updates the OCaml dependencies to their latest versions.
-            
+
             ### Changes
             - Updated opam packages
             - Regenerated lock files if any
-            
+
             Please review and merge if all tests pass.
           branch: update-dependencies
           delete-branch: true
