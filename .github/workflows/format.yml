@@ -29,6 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           opam install . --deps-only --with-dev-setup -y
+          opam install ocamlformat -y
 
       - name: Format code
         run: |
