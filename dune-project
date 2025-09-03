@@ -30,6 +30,7 @@
   (cmdliner (>= 1.3.0))
   (logs (>= 0.7.0))
   (fmt (>= 0.9.0))
+  (ounit2 (>= 2.2.0))
   (ocamlformat (and :with-dev-setup (>= 0.27.0))))
 
  (tags

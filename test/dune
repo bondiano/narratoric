@@ -1,3 +1,7 @@
 (test
  (name test_cli)
- (libraries base stdio narratoric narrat_cli cmdliner))
+ (libraries base stdio narratoric narrat_cli cmdliner ounit2))
+
+(test
+ (name test_story_lexer)
+ (libraries base stdio narratoric ounit2))
