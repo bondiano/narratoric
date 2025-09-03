@@ -1,6 +1,6 @@
 open Base
 open OUnit2
-module Lexer = Narratoric.StoryLexer
+module Lexer = Narratoric.Story.Lexer
 open Lexer
 
 let show_token = function
@@ -84,8 +84,8 @@ let test_directives ctxt =
   assert_tokens_equal ~ctxt expected actual
 
 let test_conditions ctxt =
-  let input = "[если has_item(key)]" in
-  let expected = [ Condition "если has_item(key)"; Eof ] in
+  let input = "[if has_item(key)]" in
+  let expected = [ Condition "if has_item(key)"; Eof ] in
   let actual = lex_story input in
   assert_tokens_equal ~ctxt expected actual
 
@@ -194,7 +194,7 @@ Bartender: "Welcome, stranger!"
 * [Ask about rumors] -> ask_rumors
 * [Leave] -> exit
 
-[если gold >= 5]
+[if gold >= 5]
   You have enough gold for a drink.
 
 @play_sound ambient_tavern|}
@@ -225,7 +225,7 @@ Bartender: "Welcome, stranger!"
       Text "exit";
       Newline;
       Newline;
-      Condition "если gold >= 5";
+      Condition "if gold >= 5";
       Newline;
       Text "You have enough gold for a drink.";
       Newline;

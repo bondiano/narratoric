@@ -1,4 +1,7 @@
-(* Main entry point for the Narratoric library *)
+(** Main entry point for the Narratoric library.
 
-(* Re-export Story Mode lexer *)
-module StoryLexer = Story_lexer
+    Narratoric is a multilevel DSL for interactive fiction and narrative games, providing
+    tools for story authoring, parsing, and runtime execution. *)
+
+(** Story Mode DSL module containing lexer, AST, and parser *)
+module Story = Story

@@ -1,25 +1,47 @@
+(** Story Mode Lexer for the Narratoric DSL.
+
+    This module provides lexical analysis for Story Mode, the simplest level of the
+    Narratoric DSL hierarchy. It tokenizes input text into a stream of tokens that can be
+    parsed into an AST. *)
+
 open Base
 
-(* Token types for Story Mode lexer *)
+(** Token types representing lexical elements in Story Mode:
+    - Text: Plain text content or narration
+    - Choice: Player choice ("* [text]")
+    - Arrow: State transition arrow ("->")
+    - StateMarker: State/scene marker ("## name")
+    - Directive: Engine directive ("@command params")
+    - Condition: Conditional block ("[if condition]")
+    - SkillCheck: Skill check marker ("?")
+    - SuccessArrow: Skill check success ("=>")
+    - FailureArrow: Skill check failure ("=|")
+    - VariableSet: Variable assignment ("$var = value")
+    - AddItem: Add item to inventory ("+item")
+    - RemoveItem: Remove item from inventory ("-item")
+    - Speaker: Dialogue speaker ("Name:")
+    - Newline: Line break
+    - Comment: OCaml-style comment
+    - Eof: End of file marker *)
 type token =
-  | Text of string (* Regular narration text *)
-  | Choice of string (* * [choice text] *)
-  | Arrow (* -> *)
-  | StateMarker of string (* ## state_name *)
-  | Directive of string * string (* @command params *)
-  | Condition of string (* condition text inside [] *)
-  | SkillCheck (* ? *)
-  | SuccessArrow (* => *)
-  | FailureArrow (* =| *)
-  | VariableSet of string * string (* $var = value *)
-  | AddItem of string (* +item *)
-  | RemoveItem of string (* -item *)
-  | Speaker of string (* Character: *)
-  | Newline (* Line break *)
-  | Comment of string (* Comment text - usually skipped *)
-  | Eof (* End of file *)
+  | Text of string
+  | Choice of string
+  | Arrow
+  | StateMarker of string
+  | Directive of string * string
+  | Condition of string
+  | SkillCheck
+  | SuccessArrow
+  | FailureArrow
+  | VariableSet of string * string
+  | AddItem of string
+  | RemoveItem of string
+  | Speaker of string
+  | Newline
+  | Comment of string
+  | Eof
 
-(* Lexer state *)
+(** Lexer state tracking position in input *)
 type lexer_state = {
   input : string;
   position : int;
@@ -28,7 +50,7 @@ type lexer_state = {
 
 let create_lexer input = { input; position = 0; length = String.length input }
 
-(* Helper functions *)
+(** Check if lexer has reached end of input *)
 let is_at_end state = state.position >= state.length
 
 let current_char state =
@@ -42,19 +64,19 @@ let advance state = { state with position = state.position + 1 }
 
 let advance_by state n = { state with position = state.position + n }
 
-(* Check if string starts with pattern at current position *)
+(** Check if string starts with pattern at current position *)
 let starts_with state pattern =
   let pattern_len = String.length pattern in
   state.position + pattern_len <= state.length
   && String.equal (String.sub state.input ~pos:state.position ~len:pattern_len) pattern
 
-(* Skip whitespace but not newlines *)
+(** Skip whitespace characters (space, tab, carriage return) but not newlines *)
 let rec skip_spaces state =
   match current_char state with
   | Some (' ' | '\t' | '\r') -> skip_spaces (advance state)
   | _ -> state
 
-(* Skip OCaml-style comments *)
+(** Skip OCaml-style nested comments (* ... *) *)
 let rec skip_comment state depth =
   if is_at_end state then state
   else if depth = 0 then state
@@ -68,20 +90,20 @@ let rec skip_comment state depth =
         skip_comment (advance_by state 2) (depth - 1)
     | _ -> skip_comment (advance state) depth
 
-(* Check if we're at the start of a comment and skip it *)
+(** Check if we're at the start of a comment and skip it if found *)
 let skip_comments state =
   match (current_char state, peek_char state 1) with
   | Some '(', Some '*' -> skip_comment (advance_by state 2) 1
   | _ -> state
 
-(* Skip spaces and comments *)
+(** Skip both whitespace and comments recursively *)
 let rec skip_whitespace_and_comments state =
   let state = skip_spaces state in
   let new_state = skip_comments state in
   if state.position <> new_state.position then skip_whitespace_and_comments new_state
   else state
 
-(* Read until a specific character or end of line *)
+(** Read characters until one of the stop characters or end of line is found *)
 let read_until state stop_chars =
   let start_pos = state.position in
   let rec loop state =
@@ -96,7 +118,7 @@ let read_until state stop_chars =
   in
   (String.strip text, end_state)
 
-(* Read until end of line, stripping trailing comments *)
+(** Read until end of line, automatically stripping trailing OCaml-style comments *)
 let read_line state =
   let start_pos = state.position in
   let rec loop state =
@@ -117,7 +139,7 @@ let read_line state =
   in
   (String.strip text, end_state)
 
-(* Lex a single token *)
+(** Lex a single token from the current position in the input *)
 let rec lex_token state =
   let state = skip_whitespace_and_comments state in
 
@@ -258,7 +280,9 @@ let rec lex_token state =
             let text, state = read_line state in
             if String.length text > 0 then (Text text, state) else lex_token state )
 
-(* Main lexer function *)
+(** Main lexer function that tokenizes the entire input string.
+    @param content The Story Mode DSL text to tokenize
+    @return List of tokens representing the lexical structure *)
 let lex_story content =
   let rec lex_all state acc =
     if is_at_end state then List.rev (Eof :: acc)

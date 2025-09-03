@@ -5,3 +5,7 @@
 (test
  (name test_story_lexer)
  (libraries base stdio narratoric ounit2))
+
+(test
+ (name test_story_parser)
+ (libraries base stdio narratoric ounit2))

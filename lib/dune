@@ -1,5 +1,6 @@
+(include_subdirs unqualified)
+
 (library
  (public_name narratoric)
  (name narratoric)
- (modules narratoric story_lexer)
  (libraries base stdio))
