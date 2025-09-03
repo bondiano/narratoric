@@ -27,6 +27,9 @@
   (base (>= v0.16.0))
   (stdio (>= v0.16.0))
   (ppx_deriving (>= 5.2.1))
+  (cmdliner (>= 1.3.0))
+  (logs (>= 0.7.0))
+  (fmt (>= 0.9.0))
   (ocamlformat (and :with-dev-setup (>= 0.27.0))))
 
  (tags

@@ -1,0 +1,4 @@
+(library
+ (name narrat_cli)
+ (public_name narratoric.cli)
+ (libraries base stdio narratoric cmdliner unix))
