@@ -20,6 +20,7 @@ open Base
     - AddItem: Add item to inventory ("+item")
     - RemoveItem: Remove item from inventory ("-item")
     - Speaker: Dialogue speaker ("Name:")
+    - LocaleKey: Locale key for translation ("%{key.path}")
     - Newline: Line break
     - Comment: OCaml-style comment
     - Eof: End of file marker *)
@@ -37,6 +38,7 @@ type token =
   | AddItem of string
   | RemoveItem of string
   | Speaker of string
+  | LocaleKey of string
   | Newline
   | Comment of string
   | Eof
@@ -246,6 +248,15 @@ let rec lex_token state =
           else state
         in
         (Condition cond, state)
+    (* Locale key: %{key.path} *)
+    | Some '%' when Option.equal Char.equal (peek_char state 1) (Some '{') ->
+        let state = advance_by state 2 in
+        let key, state = read_until state [ '}' ] in
+        let state =
+          if Option.equal Char.equal (current_char state) (Some '}') then advance state
+          else state
+        in
+        (LocaleKey key, state)
     (* Check for speaker: Name: *)
     | Some _ -> (
         let start_pos = state.position in

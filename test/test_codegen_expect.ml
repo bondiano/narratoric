@@ -10,7 +10,7 @@ module Ast = Narratoric.Story.Ast
 (** Helper to parse and generate JS *)
 let generate_js_normalized story_code ~story_id =
   let tokens = Lexer.lex_story story_code in
-  match Parser.parse tokens with
+  match Parser.parse ~filename:"test.story" tokens with
   | Error e -> Printf.sprintf "Parse error: %s" e.message
   | Ok story -> Codegen.compile_to_js ~story_id story
 
@@ -20,14 +20,23 @@ let generate_js_normalized_from_js js = js
 (** Print a complete valid JavaScript story object for focused testing *)
 let print_story_object story_code =
   let tokens = Lexer.lex_story story_code in
-  match Parser.parse tokens with
+  match Parser.parse ~filename:"test.story" tokens with
   | Error e -> printf "Parse error: %s\n" e.message
   | Ok _ ->
       let js = generate_js_normalized story_code ~story_id:"test" in
       print_endline js
 
-let%expect_test "simple_narration" =
+let%expect_test "missing_story_type_error" =
   let story = {|## start
+This is a simple story without a type.|} in
+  print_story_object story;
+  [%expect
+    {| Parse error: Story type not specified in file 'test.story'. Please add @scene, @npc, @merchant, or @quest at the beginning of the file (line 1, column 1) |}]
+
+let%expect_test "simple_narration" =
+  let story = {|@scene
+
+## start
 This is a simple story.
 It has multiple lines.|} in
   print_story_object story;
@@ -35,62 +44,658 @@ It has multiple lines.|} in
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         start: {
           name: "start",
           blocks: [
             {
               type: "narration",
-              content: "This is a simple story."
+              content: {
+                text: "This is a simple story."
+              }
             },
             {
               type: "narration",
-              content: "It has multiple lines."
+              content: {
+                text: "It has multiple lines."
+              }
             }
           ]
         }
       },
+      scene: {},
       runtime
     };
     |}]
 
-let%expect_test "dialogue" =
+let%expect_test "scene_with_background_music" =
   let story =
-    {|## tavern
-Bartender: "Welcome! What can I get you?"
-Player: "Just water, thanks."|}
+    {|@scene
+@background tavern_interior
+@music ambient_tavern.mp3
+
+## tavern
+The tavern is warm and inviting.|}
   in
   print_story_object story;
   [%expect
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         tavern: {
           name: "tavern",
           blocks: [
             {
+              type: "narration",
+              content: {
+                text: "The tavern is warm and inviting."
+              }
+            }
+          ]
+        }
+      },
+      scene: {
+        background: "tavern_interior",
+        music: "ambient_tavern.mp3"
+      },
+      runtime
+    };
+    |}]
+
+let%expect_test "npc_dialogue" =
+  let story =
+    {|@npc bartender
+
+## greeting
+Bartender: "Welcome! What can I get you?"
+Player: "Just water, thanks."
+
+## offer_quest
+Bartender: "You look like someone who could help with a problem..."|}
+  in
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "npc",
+      states: {
+        greeting: {
+          name: "greeting",
+          blocks: [
+            {
               type: "dialogue",
               speaker: "Bartender",
-              content: ""Welcome! What can I get you?""
+              content: {
+                text: ""Welcome! What can I get you?""
+              }
             },
             {
               type: "dialogue",
               speaker: "Player",
-              content: ""Just water, thanks.""
+              content: {
+                text: ""Just water, thanks.""
+              }
             }
           ]
+        },
+        offer_quest: {
+          name: "offer_quest",
+          blocks: [
+            {
+              type: "dialogue",
+              speaker: "Bartender",
+              content: {
+                text: ""You look like someone who could help with a problem...""
+              }
+            }
+          ]
+        }
+      },
+      npc: {
+        name: {
+          text: "bartender"
         }
       },
       runtime
     };
     |}]
 
+let%expect_test "merchant_with_inventory" =
+  let story =
+    {|@merchant blacksmith
+
+## greeting
+Blacksmith: "Looking for weapons or armor?"
+
+* [Show me weapons] -> weapons
+* [Show me armor] -> armor
+* [Leave] -> exit
+
+## weapons
++sword
++dagger
++bow
+
+## armor
++chainmail
++helmet
++shield|}
+  in
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "merchant",
+      states: {
+        greeting: {
+          name: "greeting",
+          blocks: [
+            {
+              type: "dialogue",
+              speaker: "Blacksmith",
+              content: {
+                text: ""Looking for weapons or armor?""
+              }
+            },
+            {
+              target: "weapons",
+              type: "choice",
+              text: {
+                text: "Show me weapons"
+              }
+            },
+            {
+              target: "armor",
+              type: "choice",
+              text: {
+                text: "Show me armor"
+              }
+            },
+            {
+              target: "exit",
+              type: "choice",
+              text: {
+                text: "Leave"
+              }
+            }
+          ]
+        },
+        weapons: {
+          name: "weapons",
+          blocks: [
+            {
+              type: "itemAdd",
+              item: "sword"
+            },
+            {
+              type: "itemAdd",
+              item: "dagger"
+            },
+            {
+              type: "itemAdd",
+              item: "bow"
+            }
+          ]
+        },
+        armor: {
+          name: "armor",
+          blocks: [
+            {
+              type: "itemAdd",
+              item: "chainmail"
+            },
+            {
+              type: "itemAdd",
+              item: "helmet"
+            },
+            {
+              type: "itemAdd",
+              item: "shield"
+            }
+          ]
+        }
+      },
+      merchant: {
+        name: {
+          text: "blacksmith"
+        }
+      },
+      runtime
+    };
+    |}]
+
+let%expect_test "merchant_with_initial_gold" =
+  let story =
+    {|@merchant shopkeeper
+@initial_gold 500
+
+## greeting
+Shopkeeper: "Welcome to my shop! I have the finest wares in the land."
+
+## shop
+* [Buy health potion (50 gold)] -> buy_potion
+* [Sell rusty sword (20 gold)] -> sell_sword
+* [Leave] -> exit|}
+  in
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "merchant",
+      states: {
+        greeting: {
+          name: "greeting",
+          blocks: [
+            {
+              type: "dialogue",
+              speaker: "Shopkeeper",
+              content: {
+                text: ""Welcome to my shop! I have the finest wares in the land.""
+              }
+            }
+          ]
+        },
+        shop: {
+          name: "shop",
+          blocks: [
+            {
+              target: "buy_potion",
+              type: "choice",
+              text: {
+                text: "Buy health potion (50 gold)"
+              }
+            },
+            {
+              target: "sell_sword",
+              type: "choice",
+              text: {
+                text: "Sell rusty sword (20 gold)"
+              }
+            },
+            {
+              target: "exit",
+              type: "choice",
+              text: {
+                text: "Leave"
+              }
+            }
+          ]
+        }
+      },
+      merchant: {
+        name: {
+          text: "shopkeeper"
+        },
+        initialGold: 500
+      },
+      runtime
+    };
+    |}]
+
+let%expect_test "quest_story" =
+  let story =
+    {|@quest Find the Lost Artifact
+@description An ancient artifact has been stolen from the museum. Help recover it!
+@objective Find clues about the thief
+@objective Track down the thief's hideout
+@objective Recover the artifact
+@success_description You've successfully recovered the artifact and saved the day!
+@failed_description The artifact was lost forever...
+
+## start
+Museum Curator: "Thank you for coming! The artifact was stolen last night."
+
+* [Examine the crime scene] -> investigate
+* [Question witnesses] -> witnesses
+* [Check security footage] -> footage
+
+## investigate
+You find muddy footprints leading to the window.
+$clue_footprints = true
+-> continue_investigation
+
+## witnesses
+Guard: "I saw someone in a black cloak around midnight."
+$clue_blackcloak = true
+-> continue_investigation
+
+## continue_investigation
+[if $clue_footprints and $clue_blackcloak]
+  You have enough clues to track the thief!
+  -> find_hideout|}
+  in
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "quest",
+      states: {
+        start: {
+          name: "start",
+          blocks: [
+            {
+              type: "dialogue",
+              speaker: "Museum Curator",
+              content: {
+                text: ""Thank you for coming! The artifact was stolen last night.""
+              }
+            },
+            {
+              target: "investigate",
+              type: "choice",
+              text: {
+                text: "Examine the crime scene"
+              }
+            },
+            {
+              target: "witnesses",
+              type: "choice",
+              text: {
+                text: "Question witnesses"
+              }
+            },
+            {
+              target: "footage",
+              type: "choice",
+              text: {
+                text: "Check security footage"
+              }
+            }
+          ]
+        },
+        investigate: {
+          name: "investigate",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                text: "You find muddy footprints leading to the window."
+              }
+            },
+            {
+              type: "variableSet",
+              name: "clue_footprints",
+              value: "true"
+            },
+            {
+              type: "transition",
+              target: "continue_investigation"
+            }
+          ]
+        },
+        witnesses: {
+          name: "witnesses",
+          blocks: [
+            {
+              type: "dialogue",
+              speaker: "Guard",
+              content: {
+                text: ""I saw someone in a black cloak around midnight.""
+              }
+            },
+            {
+              type: "variableSet",
+              name: "clue_blackcloak",
+              value: "true"
+            },
+            {
+              type: "transition",
+              target: "continue_investigation"
+            }
+          ]
+        },
+        continue_investigation: {
+          name: "continue_investigation",
+          blocks: [
+            {
+              type: "conditional",
+              condition: {
+                type: "binary",
+                operator: "and",
+                left: {
+                  type: "binary",
+                  operator: "and",
+                  left: "$clue_footprints",
+                  right: "$clue_footprints"
+                },
+                right: "$clue_blackcloak"
+              },
+              thenBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "You have enough clues to track the thief!"
+                  }
+                },
+                {
+                  type: "transition",
+                  target: "find_hideout"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      quest: {
+        title: {
+          text: "Find the Lost Artifact"
+        },
+        description: {
+          text: "An ancient artifact has been stolen from the museum. Help recover it!"
+        },
+        objectives: [
+          {
+            text: "Find clues about the thief"
+          },
+          {
+            text: "Track down the thief's hideout"
+          },
+          {
+            text: "Recover the artifact"
+          }
+        ],
+        successDescription: {
+          text: "You've successfully recovered the artifact and saved the day!"
+        },
+        failedDescription: {
+          text: "The artifact was lost forever..."
+        }
+      },
+      runtime
+    };
+    |}]
+
+let%expect_test "scene_with_directives" =
+  let story =
+    {|@scene
+@background dungeon_room
+@tags interactive, puzzle
+@uses inventory, effects
+
+## treasure_room
+(* Scene with interactive objects *)
+
+@create_object treasure_chest position:center
+@move_object treasure_chest to:{x:600,y:400} duration:2s
+
+You see a mysterious chest in the center of the room.
+
+* [Open the chest] -> open_chest
+* [Leave it alone] -> exit
+
+## open_chest
+@text_popup "+10 XP" position:player color:gold
+@remove_object treasure_chest fade:true
+
+You found a magical amulet!
++amulet|}
+  in
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "scene",
+      states: {
+        treasure_room: {
+          name: "treasure_room",
+          blocks: [
+            {
+              type: "directive",
+              command: "create_object",
+              params: "treasure_chest position:center"
+            },
+            {
+              type: "directive",
+              command: "move_object",
+              params: "treasure_chest to:{x:600,y:400} duration:2s"
+            },
+            {
+              type: "narration",
+              content: {
+                text: "You see a mysterious chest in the center of the room."
+              }
+            },
+            {
+              target: "open_chest",
+              type: "choice",
+              text: {
+                text: "Open the chest"
+              }
+            },
+            {
+              target: "exit",
+              type: "choice",
+              text: {
+                text: "Leave it alone"
+              }
+            }
+          ]
+        },
+        open_chest: {
+          name: "open_chest",
+          blocks: [
+            {
+              type: "directive",
+              command: "text_popup",
+              params: ""+10 XP" position:player color:gold"
+            },
+            {
+              type: "directive",
+              command: "remove_object",
+              params: "treasure_chest fade:true"
+            },
+            {
+              type: "narration",
+              content: {
+                text: "You found a magical amulet!"
+              }
+            },
+            {
+              type: "itemAdd",
+              item: "amulet"
+            }
+          ]
+        }
+      },
+      scene: {
+        background: "dungeon_room"
+      },
+      tags: [
+        "interactive",
+        "puzzle"
+      ],
+      plugins: [
+        "inventory",
+        "effects"
+      ],
+      runtime
+    };
+    |}]
+
+let%expect_test "interactive_zones" =
+  let story =
+    {|@scene
+
+## hallway
+@hotspot door_area {x:100,y:200,w:50,h:100}
+  on_click: -> enter_door
+  on_hover: @highlight door
+
+You stand in a long hallway with a door at the end.|}
+  in
+  (* Note: hotspot is currently not a recognized directive format, will be treated as
+     directive *)
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "scene",
+      states: {
+        hallway: {
+          name: "hallway",
+          blocks: [
+            {
+              type: "directive",
+              command: "hotspot",
+              params: "door_area {x:100,y:200,w:50,h:100}"
+            },
+            {
+              type: "narration",
+              content: {
+                text: "on_click"
+              }
+            },
+            {
+              type: "transition",
+              target: "enter_door"
+            },
+            {
+              type: "narration",
+              content: {
+                text: "on_hover"
+              }
+            },
+            {
+              type: "directive",
+              command: "highlight",
+              params: "door"
+            },
+            {
+              type: "narration",
+              content: {
+                text: "You stand in a long hallway with a door at the end."
+              }
+            }
+          ]
+        }
+      },
+      scene: {},
+      runtime
+    };
+    |}]
+
 let%expect_test "choices" =
   let story =
-    {|## crossroads
+    {|@scene
+
+## crossroads
 You reach a crossroads.
 
 * [Go left] -> left_path
@@ -102,38 +707,50 @@ You reach a crossroads.
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         crossroads: {
           name: "crossroads",
           blocks: [
             {
               type: "narration",
-              content: "You reach a crossroads."
+              content: {
+                text: "You reach a crossroads."
+              }
             },
             {
               target: "left_path",
               type: "choice",
-              text: "Go left"
+              text: {
+                text: "Go left"
+              }
             },
             {
               target: "right_path",
               type: "choice",
-              text: "Go right"
+              text: {
+                text: "Go right"
+              }
             },
             {
               type: "choice",
-              text: "Turn back"
+              text: {
+                text: "Turn back"
+              }
             }
           ]
         }
       },
+      scene: {},
       runtime
     };
     |}]
 
 let%expect_test "variables_and_items" =
-  let story = {|## shop
+  let story = {|@scene
+
+## shop
 $gold = 100
 $health = 10
 +sword
@@ -143,7 +760,8 @@ $health = 10
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         shop: {
           name: "shop",
@@ -169,162 +787,16 @@ $health = 10
           ]
         }
       },
-      runtime
-    };
-    |}]
-
-let%expect_test "conditionals" =
-  let story =
-    {|## treasury
-[if $gold >= 50]
-  You feel wealthy!
-[else]
-  You need more gold.
-[end]|}
-  in
-  print_story_object story;
-  [%expect
-    {|
-    import { runtime } from "@narratoric/core";
-
-    export const story = {
-      states: {
-        treasury: {
-          name: "treasury",
-          blocks: [
-            {
-              type: "conditional",
-              condition: {
-                type: "binary",
-                operator: ">=",
-                left: {
-                  type: "variable",
-                  name: "$gold"
-                },
-                right: 50
-              },
-              thenBlocks: [
-                {
-                  type: "narration",
-                  content: "You feel wealthy!"
-                },
-                {
-                  type: "conditional",
-                  condition: "else",
-                  thenBlocks: [
-                    {
-                      type: "narration",
-                      content: "You need more gold."
-                    },
-                    {
-                      type: "conditional",
-                      condition: "end",
-                      thenBlocks: []
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      },
-      runtime
-    };
-    |}]
-
-let%expect_test "complex_conditionals" =
-  let story =
-    {|## complex_check
-[if $gold >= 100 and (@player/stats.stamina == 100 or @player/stats.agility < 10) and @my_game/bonus_system.bonuses > 1000]
-  You have achieved greatness!
-[else]
-  Keep working towards your goals.
-[end]|}
-  in
-  print_story_object story;
-  [%expect
-    {|
-    import { runtime } from "@narratoric/core";
-
-    export const story = {
-      states: {
-        complex_check: {
-          name: "complex_check",
-          blocks: [
-            {
-              type: "conditional",
-              condition: {
-                type: "binary",
-                operator: "and",
-                left: {
-                  type: "binary",
-                  operator: "and",
-                  left: {
-                    type: "binary",
-                    operator: "and",
-                    left: {
-                      type: "binary",
-                      operator: ">=",
-                      left: {
-                        type: "variable",
-                        name: "$gold"
-                      },
-                      right: 100
-                    },
-                    right: {
-                      type: "binary",
-                      operator: ">=",
-                      left: {
-                        type: "variable",
-                        name: "$gold"
-                      },
-                      right: 100
-                    }
-                  },
-                  right: "@player/stats.stamina == 100 or @player/stats.agility < 10"
-                },
-                right: {
-                  type: "binary",
-                  operator: ">",
-                  left: {
-                    type: "variable",
-                    name: "@my_game/bonus_system.bonuses"
-                  },
-                  right: 1000
-                }
-              },
-              thenBlocks: [
-                {
-                  type: "narration",
-                  content: "You have achieved greatness!"
-                },
-                {
-                  type: "conditional",
-                  condition: "else",
-                  thenBlocks: [
-                    {
-                      type: "narration",
-                      content: "Keep working towards your goals."
-                    },
-                    {
-                      type: "conditional",
-                      condition: "end",
-                      thenBlocks: []
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      },
+      scene: {},
       runtime
     };
     |}]
 
 let%expect_test "skill_checks" =
   let story =
-    {|## dungeon
+    {|@scene
+
+## dungeon
 ? perception check DC 15
   => You notice a trap!
   =| You see nothing unusual.|}
@@ -334,71 +806,157 @@ let%expect_test "skill_checks" =
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         dungeon: {
           name: "dungeon",
           blocks: [
             {
               type: "skillCheck",
-              description: "perception check DC 15",
+              skillType: "perception",
+              difficulty: 15,
+              description: {
+                text: "perception check DC 15"
+              },
               successBlocks: [
                 {
                   type: "narration",
-                  content: "You notice a trap!"
+                  content: {
+                    text: "You notice a trap!"
+                  }
                 }
               ],
               failureBlocks: [
                 {
                   type: "narration",
-                  content: "You see nothing unusual."
+                  content: {
+                    text: "You see nothing unusual."
+                  }
                 }
               ]
             }
           ]
         }
       },
+      scene: {},
       runtime
     };
     |}]
 
-let%expect_test "directives_and_transitions" =
-  let story = {|## cutscene
-@play_sound thunder.mp3
-The storm begins!
--> next_scene|} in
+let%expect_test "skill_checks_various_formats" =
+  let story =
+    {|@scene
+
+## tests
+? agility DC 20
+  => You leap gracefully!
+  =| You stumble and fall.
+
+? strength 25
+  => You lift the heavy stone!
+  =| The stone won't budge.
+
+? lockpicking difficulty 18
+  => *Click* The lock opens!
+  =| The lock remains secure.|}
+  in
   print_story_object story;
   [%expect
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
-        cutscene: {
-          name: "cutscene",
+        tests: {
+          name: "tests",
           blocks: [
             {
-              type: "directive",
-              command: "play_sound",
-              params: "thunder.mp3"
+              type: "skillCheck",
+              skillType: "agility",
+              difficulty: 20,
+              description: {
+                text: "agility DC 20"
+              },
+              successBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "You leap gracefully!"
+                  }
+                }
+              ],
+              failureBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "You stumble and fall."
+                  }
+                }
+              ]
             },
             {
-              type: "narration",
-              content: "The storm begins!"
+              type: "skillCheck",
+              skillType: "strength",
+              difficulty: 25,
+              description: {
+                text: "strength 25"
+              },
+              successBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "You lift the heavy stone!"
+                  }
+                }
+              ],
+              failureBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "The stone won't budge."
+                  }
+                }
+              ]
             },
             {
-              type: "transition",
-              target: "next_scene"
+              type: "skillCheck",
+              skillType: "lockpicking",
+              difficulty: 18,
+              description: {
+                text: "lockpicking difficulty 18"
+              },
+              successBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "*Click* The lock opens!"
+                  }
+                }
+              ],
+              failureBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "The lock remains secure."
+                  }
+                }
+              ]
             }
           ]
         }
       },
+      scene: {},
       runtime
     };
     |}]
 
 let%expect_test "multiple_states" =
-  let story = {|## start
+  let story =
+    {|@scene
+
+## start
 Welcome!
 -> main
 
@@ -406,20 +964,24 @@ Welcome!
 Main area.
 
 ## end
-Game over.|} in
+Game over.|}
+  in
   print_story_object story;
   [%expect
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         start: {
           name: "start",
           blocks: [
             {
               type: "narration",
-              content: "Welcome!"
+              content: {
+                text: "Welcome!"
+              }
             },
             {
               type: "transition",
@@ -432,7 +994,9 @@ Game over.|} in
           blocks: [
             {
               type: "narration",
-              content: "Main area."
+              content: {
+                text: "Main area."
+              }
             }
           ]
         },
@@ -441,34 +1005,119 @@ Game over.|} in
           blocks: [
             {
               type: "narration",
-              content: "Game over."
+              content: {
+                text: "Game over."
+              }
             }
           ]
         }
       },
+      scene: {},
       runtime
     };
     |}]
 
-let%expect_test "escaping" =
-  let story = {|## test
-Text with "quotes" and \backslash.|} in
+let%expect_test "localization_example" =
+  let story =
+    {|@scene
+@background tavern_interior
+
+## start
+%{tavern.entrance.welcome}
+Welcome to the Drunken Griffin!
+
+Bartender: %{npc.bartender.greeting}
+"What can I get you, traveler?"
+
+* %{choice.order_drink} [Order a drink] -> drink
+* %{choice.ask_rumors} [Ask about rumors] -> rumors
+
+## drink
+%{tavern.drink.response}
+The bartender pours you a frothy ale.
+
+## rumors
+%{tavern.rumors.intro}
+The bartender leans in closer...
+
+Bartender: %{npc.bartender.secret}
+"Strange things have been happening in the old mines..."|}
+  in
   print_story_object story;
   [%expect
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
-        test: {
-          name: "test",
+        start: {
+          name: "start",
           blocks: [
             {
               type: "narration",
-              content: "Text with "quotes" and \backslash."
+              content: {
+                locale_key: "tavern.entrance.welcome",
+                text: "Welcome to the Drunken Griffin!"
+              }
+            },
+            {
+              type: "dialogue",
+              speaker: "Bartender",
+              content: {
+                locale_key: "npc.bartender.greeting",
+                text: ""What can I get you, traveler?""
+              }
+            },
+            {
+              type: "narration",
+              content: {
+                text: "* %{choice.order_drink} [Order a drink] -> drink"
+              }
+            },
+            {
+              type: "narration",
+              content: {
+                text: "* %{choice.ask_rumors} [Ask about rumors] -> rumors"
+              }
+            }
+          ]
+        },
+        drink: {
+          name: "drink",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                locale_key: "tavern.drink.response",
+                text: "The bartender pours you a frothy ale."
+              }
+            }
+          ]
+        },
+        rumors: {
+          name: "rumors",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                locale_key: "tavern.rumors.intro",
+                text: "The bartender leans in closer..."
+              }
+            },
+            {
+              type: "dialogue",
+              speaker: "Bartender",
+              content: {
+                locale_key: "npc.bartender.secret",
+                text: ""Strange things have been happening in the old mines...""
+              }
             }
           ]
         }
+      },
+      scene: {
+        background: "tavern_interior"
       },
       runtime
     };
@@ -480,14 +1129,26 @@ let%expect_test "manual_ast_conditional" =
     Ast.BinaryOp
       { op = Ast.Gte; left = Ast.Variable "$gold"; right = Ast.Literal (Ast.Int 50) }
   in
-  let then_blocks = [ Ast.Narration "You feel wealthy!" ] in
-  let else_blocks = [ Ast.Narration "You need more gold." ] in
+  let then_blocks = [ Ast.Narration { text = "You feel wealthy!"; locale_key = None } ] in
+  let else_blocks =
+    [ Ast.Narration { text = "You need more gold."; locale_key = None } ]
+  in
   let conditional_block =
     Ast.Conditional
       { condition = condition_ast; then_blocks; else_blocks = Some else_blocks }
   in
   let state = { Ast.name = "treasury"; blocks = [ conditional_block ] } in
-  let story = [ state ] in
+  let story =
+    {
+      Ast.metadata =
+        {
+          story_type = Ast.Scene { background = None; music = None };
+          tags = [];
+          uses = [];
+        };
+      states = [ state ];
+    }
+  in
   let js = Codegen.compile_to_js ~story_id:"test" story in
   let normalized = generate_js_normalized_from_js js in
   print_endline normalized;
@@ -495,7 +1156,8 @@ let%expect_test "manual_ast_conditional" =
     {|
     import { runtime } from "@narratoric/core";
 
-    export const story = {
+    export default {
+      type: "scene",
       states: {
         treasury: {
           name: "treasury",
@@ -504,7 +1166,9 @@ let%expect_test "manual_ast_conditional" =
               elseBlocks: [
                 {
                   type: "narration",
-                  content: "You need more gold."
+                  content: {
+                    text: "You need more gold."
+                  }
                 }
               ],
               type: "conditional",
@@ -520,13 +1184,16 @@ let%expect_test "manual_ast_conditional" =
               thenBlocks: [
                 {
                   type: "narration",
-                  content: "You feel wealthy!"
+                  content: {
+                    text: "You feel wealthy!"
+                  }
                 }
               ]
             }
           ]
         }
       },
+      scene: {},
       runtime
     };
     |}]

@@ -17,7 +17,7 @@ let assert_js_contains js ~substring ~msg =
   assert_bool msg (String.is_substring js ~substring)
 
 let test_simple_narration _ =
-  let story = "## start\nThis is a simple story." in
+  let story = "@scene\n\n## start\nThis is a simple story." in
   match generate_js story ~story_id:"test" with
   | Error msg -> assert_failure msg
   | Ok js ->
@@ -27,7 +27,9 @@ let test_simple_narration _ =
 
 (** Test multiple states *)
 let test_multiple_states _ =
-  let story = {|## start
+  let story = {|@scene
+
+## start
 Welcome!
 
 ## main
@@ -42,32 +44,35 @@ Main area.|} in
 
 (** Test basic JavaScript module structure *)
 let test_module_structure _ =
-  let story = "## start\nHello world." in
+  let story = "@scene\n\n## start\nHello world." in
   match generate_js story ~story_id:"test_story" with
   | Error msg -> assert_failure msg
   | Ok js ->
       assert_js_contains js ~substring:"import { runtime } from \"@narratoric/core\""
         ~msg:"Should import runtime";
-      assert_js_contains js ~substring:"export const story" ~msg:"Should export story"
+      assert_js_contains js ~substring:"export default" ~msg:"Should export default"
 
 (** Test that parser produces expected AST for narration *)
 let test_narration_ast _ =
-  let story = "## start\nThis is narration text." in
+  let story = "@scene\n\n## start\nThis is narration text." in
   let tokens = Lexer.lex_story story in
   match Parser.parse tokens with
   | Error e -> assert_failure e.message
-  | Ok states ->
-      assert_equal 1 (List.length states) ~msg:"Should have one state";
-      let state = List.hd_exn states in
+  | Ok story ->
+      assert_equal 1 (List.length story.states) ~msg:"Should have one state";
+      let state = List.hd_exn story.states in
       assert_equal "start" state.name ~msg:"State should be named 'start'";
       assert_equal 1 (List.length state.blocks) ~msg:"Should have one block";
       let block = List.hd_exn state.blocks in
-      assert_equal (Ast.Narration "This is narration text.") block
-        ~msg:"Should contain narration block"
+      assert_equal
+        (Ast.Narration { text = "This is narration text."; locale_key = None })
+        block ~msg:"Should contain narration block"
 
 (** Test that parser handles multiple states *)
 let test_multiple_states_ast _ =
-  let story = {|## start
+  let story = {|@scene
+
+## start
 Welcome!
 
 ## end
@@ -75,10 +80,10 @@ Goodbye!|} in
   let tokens = Lexer.lex_story story in
   match Parser.parse tokens with
   | Error e -> assert_failure e.message
-  | Ok states ->
-      assert_equal 2 (List.length states) ~msg:"Should have two states";
-      let first_state = List.hd_exn states in
-      let second_state = List.nth_exn states 1 in
+  | Ok story ->
+      assert_equal 2 (List.length story.states) ~msg:"Should have two states";
+      let first_state = List.hd_exn story.states in
+      let second_state = List.nth_exn story.states 1 in
       assert_equal "start" first_state.name ~msg:"First state should be 'start'";
       assert_equal "end" second_state.name ~msg:"Second state should be 'end'"
 

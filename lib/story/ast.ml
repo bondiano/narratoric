@@ -5,8 +5,45 @@ open Base
     This module defines the AST structure for the Story Mode language, which is the
     simplest level of the Narratoric DSL hierarchy. *)
 
-(** A story is a collection of states/scenes *)
-type story = state list
+(** Localizable text with optional translation key *)
+type localizable_text = {
+  text : string;  (** The actual text content *)
+  locale_key : string option;
+      (** Optional translation key like "tavern.entrance.description" *)
+}
+
+(** Story type variants with specific fields for each type *)
+and story_type =
+  | Scene of {
+      background : string option;
+      music : string option;
+    }
+  | Npc of { name : localizable_text option }
+  | Merchant of {
+      name : localizable_text option;
+      inventory : string list;
+      initial_gold : int option;  (** Starting gold for the merchant *)
+    }
+  | Quest of {
+      title : localizable_text option;  (** Quest title *)
+      description : localizable_text option;  (** Quest description *)
+      objectives : localizable_text list;  (** List of objective descriptions *)
+      success_description : localizable_text option;  (** Text shown on success *)
+      failed_description : localizable_text option;  (** Text shown on failure *)
+    }
+
+(** Story metadata that defines the type and configuration *)
+type story_metadata = {
+  story_type : story_type;  (** Story type with specific fields *)
+  tags : string list;  (** Tags for plugins and hooks *)
+  uses : string list;  (** Required modules/plugins *)
+}
+
+(** A story is metadata + collection of states/scenes *)
+type story = {
+  metadata : story_metadata;
+  states : state list;
+}
 
 (** A state represents a scene or location in the story *)
 and state = {
@@ -15,7 +52,7 @@ and state = {
 }
 
 (** Different types of blocks that can appear in a state:
-    - Narration: Plain text narration
+    - Narration: Plain text narration with optional locale key
     - Dialogue: Character dialogue with speaker and text ("Character: text")
     - Choice: Player choice with optional target state
     - Conditional: Conditional block with if/else logic ([if condition] ...)
@@ -26,10 +63,10 @@ and state = {
     - Directive: Engine directive (@command params)
     - Transition: State transition (-> state_name) *)
 and block =
-  | Narration of string
+  | Narration of localizable_text
   | Dialogue of {
       speaker : string;
-      text : string;
+      text : localizable_text;
     }
   | Choice of choice
   | Conditional of conditional
@@ -114,7 +151,7 @@ and expression =
 
 (** Player choice structure *)
 and choice = {
-  text : string;  (** Display text shown to player *)
+  text : localizable_text;  (** Display text shown to player with optional locale key *)
   target : string option;  (** Optional target state after selection *)
   condition : expression option;  (** Optional condition for availability *)
 }
@@ -128,7 +165,9 @@ and conditional = {
 
 (** Skill check with success/failure outcomes *)
 and skill_check = {
-  description : string;  (** Check description, e.g. "perception check DC 15" *)
+  skill_type : string;  (** The skill being checked (e.g., "perception", "agility") *)
+  difficulty : int;  (** Difficulty class (DC) for the check *)
+  description : localizable_text;  (** Check description with optional locale key *)
   success_blocks : block list;  (** Blocks to execute on success (=>) *)
   failure_blocks : block list;  (** Blocks to execute on failure (=|) *)
 }

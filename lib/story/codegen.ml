@@ -22,10 +22,7 @@ module JsAst = struct
         from : string;
         imports : string list;
       }
-    | JsExport of {
-        name : string;
-        value : js_value;
-      }
+    | JsExportDefault of { value : js_value }
 end
 
 (** JavaScript code formatter - converts JS AST to formatted code *)
@@ -85,9 +82,8 @@ module JsFormatter = struct
   let format_statement = function
     | JsImport { from; imports } ->
         Printf.sprintf "import { %s } from \"%s\";" (String.concat ~sep:", " imports) from
-    | JsExport { name; value } ->
-        Printf.sprintf "export const %s = %s;" name
-          (format_value ~level:0 ~inline:false value)
+    | JsExportDefault { value } ->
+        Printf.sprintf "export default %s;" (format_value ~level:0 ~inline:false value)
 
   let format_program statements =
     String.concat ~sep:"\n\n" (List.map statements ~f:format_statement)
@@ -292,19 +288,32 @@ module AstMapper = struct
             ("args", JsArray (List.map args ~f:map_expression));
           ]
 
+  (** Helper function to convert localizable_text to JS object *)
+  let map_localizable_text { text; locale_key } =
+    let base = [ ("text", JsString text) ] in
+    match locale_key with
+    | Some key -> ("locale_key", JsString key) :: base
+    | None -> base
+
   (** Convert block to JS AST *)
   let rec map_block = function
-    | Narration text ->
-        JsObject [ ("type", JsString "narration"); ("content", JsString text) ]
+    | Narration localizable_text ->
+        JsObject
+          [
+            ("type", JsString "narration");
+            ("content", JsObject (map_localizable_text localizable_text));
+          ]
     | Dialogue { speaker; text } ->
         JsObject
           [
             ("type", JsString "dialogue");
             ("speaker", JsString speaker);
-            ("content", JsString text);
+            ("content", JsObject (map_localizable_text text));
           ]
     | Choice { text; target; condition } ->
-        let base = [ ("type", JsString "choice"); ("text", JsString text) ] in
+        let base =
+          [ ("type", JsString "choice"); ("text", JsObject (map_localizable_text text)) ]
+        in
         let with_target =
           match target with Some t -> ("target", JsString t) :: base | None -> base
         in
@@ -328,11 +337,14 @@ module AstMapper = struct
           | None -> base
         in
         JsObject with_else
-    | SkillCheck { description; success_blocks; failure_blocks } ->
+    | SkillCheck { skill_type; difficulty; description; success_blocks; failure_blocks }
+      ->
         JsObject
           [
             ("type", JsString "skillCheck");
-            ("description", JsString description);
+            ("skillType", JsString skill_type);
+            ("difficulty", JsNumber difficulty);
+            ("description", JsObject (map_localizable_text description));
             ("successBlocks", JsArray (List.map success_blocks ~f:map_block));
             ("failureBlocks", JsArray (List.map failure_blocks ~f:map_block));
           ]
@@ -363,8 +375,9 @@ module AstMapper = struct
 
   (** Convert story to complete JS module AST *)
   let map_story story =
+    (* Map states *)
     let states_list =
-      List.fold story ~init:[] ~f:(fun acc state ->
+      List.fold story.states ~init:[] ~f:(fun acc state ->
           let js_identifier =
             String.substr_replace_all state.name ~pattern:"-" ~with_:"_"
             |> String.lowercase
@@ -374,13 +387,86 @@ module AstMapper = struct
     in
     let states_obj = JsObject states_list in
 
-    let story_obj =
-      JsObject [ ("states", states_obj); ("runtime", JsIdentifier "runtime") ]
+    let story_fields =
+      ( match story.metadata.story_type with
+      | Ast.Scene _ -> [ ("type", JsString "scene") ]
+      | Ast.Npc _ -> [ ("type", JsString "npc") ]
+      | Ast.Merchant _ -> [ ("type", JsString "merchant") ]
+      | Ast.Quest _ -> [ ("type", JsString "quest") ] )
+      @ [ ("states", states_obj) ]
+      @ ( match story.metadata.story_type with
+        | Ast.Scene { background; music } ->
+            let scene_fields =
+              ( match background with
+              | Some bg -> [ ("background", JsString bg) ]
+              | None -> [] )
+              @ match music with Some m -> [ ("music", JsString m) ] | None -> []
+            in
+            [ ("scene", JsObject scene_fields) ]
+        | Ast.Npc { name } ->
+            let npc_fields =
+              match name with
+              | Some n -> [ ("name", JsObject (map_localizable_text n)) ]
+              | None -> []
+            in
+            [ ("npc", JsObject npc_fields) ]
+        | Ast.Merchant { name; inventory; initial_gold } ->
+            let merchant_fields =
+              ( match name with
+              | Some n -> [ ("name", JsObject (map_localizable_text n)) ]
+              | None -> [] )
+              @ ( match initial_gold with
+                | Some g -> [ ("initialGold", JsNumber g) ]
+                | None -> [] )
+              @
+              if List.is_empty inventory then []
+              else
+                [ ("inventory", JsArray (List.map inventory ~f:(fun i -> JsString i))) ]
+            in
+            [ ("merchant", JsObject merchant_fields) ]
+        | Ast.Quest
+            { title; description; objectives; success_description; failed_description } ->
+            let quest_fields =
+              ( match title with
+              | Some t -> [ ("title", JsObject (map_localizable_text t)) ]
+              | None -> [] )
+              @ ( match description with
+                | Some d -> [ ("description", JsObject (map_localizable_text d)) ]
+                | None -> [] )
+              @ ( if List.is_empty objectives then []
+                  else
+                    [
+                      ( "objectives",
+                        JsArray
+                          (List.map objectives ~f:(fun o ->
+                               JsObject (map_localizable_text o) ) ) );
+                    ] )
+              @ ( match success_description with
+                | Some s -> [ ("successDescription", JsObject (map_localizable_text s)) ]
+                | None -> [] )
+              @
+              match failed_description with
+              | Some f -> [ ("failedDescription", JsObject (map_localizable_text f)) ]
+              | None -> []
+            in
+            [ ("quest", JsObject quest_fields) ] )
+      @ ( if List.is_empty story.metadata.tags then []
+          else
+            [ ("tags", JsArray (List.map story.metadata.tags ~f:(fun t -> JsString t))) ]
+        )
+      @ ( if List.is_empty story.metadata.uses then []
+          else
+            [
+              ("plugins", JsArray (List.map story.metadata.uses ~f:(fun u -> JsString u)));
+            ] )
+      @ [ ("runtime", JsIdentifier "runtime") ]
     in
+
+    let story_obj = JsObject story_fields in
 
     [
       JsImport { from = "@narratoric/core"; imports = [ "runtime" ] };
-      JsExport { name = "story"; value = story_obj };
+      JsExportDefault { value = story_obj };
     ]
 end
 
@@ -398,20 +484,36 @@ module BlockGen = struct
     js_object [ type_pair block_type; (key, quote_string value) ]
 
   (** Compile narration block *)
-  let compile_narration text = compile_simple_block narration "content" text
+  let compile_localizable_text_field { text; locale_key } =
+    let base = [ ("text", quote_string text) ] in
+    match locale_key with
+    | Some key -> ("locale_key", quote_string key) :: base
+    | None -> base
+
+  let compile_narration localizable_text =
+    js_object
+      [
+        type_pair narration;
+        ("content", js_object (compile_localizable_text_field localizable_text));
+      ]
 
   (** Compile dialogue block *)
-  let compile_dialogue speaker text =
+  let compile_dialogue speaker localizable_text =
     js_object
       [
         type_pair dialogue;
         ("speaker", quote_string speaker);
-        ("content", quote_string text);
+        ("content", js_object (compile_localizable_text_field localizable_text));
       ]
 
   (** Compile choice block *)
-  let compile_choice text target condition =
-    let base = [ type_pair choice; ("text", quote_string text) ] in
+  let compile_choice localizable_text target condition =
+    let base =
+      [
+        type_pair choice;
+        ("text", js_object (compile_localizable_text_field localizable_text));
+      ]
+    in
     let target_pairs = optional_pair "target" target quote_string in
     let condition_pairs =
       optional_pair "condition" condition ExpressionGen.compile_to_ast_object
@@ -434,11 +536,14 @@ module BlockGen = struct
     js_object (base @ else_pairs)
 
   (** Compile skill check block *)
-  and compile_skill_check description success_blocks failure_blocks =
+  and compile_skill_check skill_type difficulty description success_blocks failure_blocks
+      =
     js_object
       [
         type_pair skill_check;
-        ("description", quote_string description);
+        ("skillType", quote_string skill_type);
+        ("difficulty", Int.to_string difficulty);
+        ("description", js_object (compile_localizable_text_field description));
         ("successBlocks", compile_blocks_array success_blocks compile_block);
         ("failureBlocks", compile_blocks_array failure_blocks compile_block);
       ]
@@ -471,8 +576,10 @@ module BlockGen = struct
     | Choice { text; target; condition } -> compile_choice text target condition
     | Conditional { condition; then_blocks; else_blocks } ->
         compile_conditional condition then_blocks else_blocks
-    | SkillCheck { description; success_blocks; failure_blocks } ->
-        compile_skill_check description success_blocks failure_blocks
+    | SkillCheck { skill_type; difficulty; description; success_blocks; failure_blocks }
+      ->
+        compile_skill_check skill_type difficulty description success_blocks
+          failure_blocks
     | VariableSet { name; value } -> compile_variable_set name value
     | ItemAdd item -> compile_simple_block item_add "item" item
     | ItemRemove item -> compile_simple_block item_remove "item" item
@@ -496,7 +603,7 @@ module StateGen = struct
     (js_identifier name, state_obj)
 
   (** Compile all states to JavaScript object *)
-  let compile_states states = states |> List.map ~f:compile_state |> js_object
+  let compile_states story = story.states |> List.map ~f:compile_state |> js_object
 end
 
 (** Main code generation *)
@@ -506,7 +613,7 @@ module CodeGen = struct
     Printf.sprintf
       {|import { runtime } from "@narratoric/core";
 
-export const story = {
+export default {
   states: %s,
   runtime
 };

@@ -31,7 +31,7 @@ let compile_story_file story_file output_dir =
     let content = In_channel.read_all story_file in
     let tokens = Story.Lexer.lex_story content in
 
-    match Story.Parser.parse tokens with
+    match Story.Parser.parse ~filename:story_file tokens with
     | Ok story_ast ->
         let base_name =
           Stdlib.Filename.basename story_file |> Stdlib.Filename.chop_extension

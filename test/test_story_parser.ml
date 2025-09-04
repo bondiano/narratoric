@@ -9,54 +9,62 @@ let parse_string input =
   Parser.parse tokens
 
 let test_simple_narration _ =
-  let input = "## start\nThis is narration text." in
+  let input = "@scene\n\n## start\nThis is narration text." in
   match parse_string input with
-  | Ok states -> (
-      assert_equal 1 (List.length states);
-      let state = List.hd_exn states in
+  | Ok story -> (
+      assert_equal 1 (List.length story.states);
+      let state = List.hd_exn story.states in
       assert_equal "start" state.name;
       assert_equal 1 (List.length state.blocks);
       match List.hd_exn state.blocks with
-      | Ast.Narration text -> assert_equal "This is narration text." text
+      | Ast.Narration { text; _ } -> assert_equal "This is narration text." text
       | _ -> assert_failure "Expected narration block" )
   | Error e -> assert_failure e.message
 
 let test_dialogue _ =
-  let input = {|## dialogue_test
+  let input = {|@scene
+
+## dialogue_test
 John: "Hello, world!"|} in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       assert_equal "dialogue_test" state.name;
       match List.hd_exn state.blocks with
       | Ast.Dialogue { speaker; text } ->
           assert_equal "John" speaker;
-          assert_equal "\"Hello, world!\"" text
+          assert_equal "\"Hello, world!\"" text.text
       | _ -> assert_failure "Expected dialogue block" )
   | Error e -> assert_failure e.message
 
 let test_choice _ =
-  let input = {|## choices
+  let input =
+    {|@scene
+
+## choices
 * [Go left] -> left_path
-* [Go right] -> right_path|} in
+* [Go right] -> right_path|}
+  in
   match parse_string input with
-  | Ok states ->
-      let state = List.hd_exn states in
+  | Ok story ->
+      let state = List.hd_exn story.states in
       assert_equal 2 (List.length state.blocks);
       List.iter state.blocks ~f:(function
         | Ast.Choice { text; target; _ } ->
-            assert_bool "Choice should have text" (String.length text > 0);
+            assert_bool "Choice should have text" (String.length text.text > 0);
             assert_bool "Choice should have target" (Option.is_some target)
         | _ -> assert_failure "Expected choice blocks" )
   | Error e -> assert_failure e.message
 
 let test_variables _ =
-  let input = {|## variables
+  let input = {|@scene
+
+## variables
 $gold = 100
 $name = "Hero"|} in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       assert_equal 2 (List.length state.blocks);
       match List.hd state.blocks with
       | Some (Ast.VariableSet { name; _ }) -> assert_equal "gold" name
@@ -64,12 +72,14 @@ $name = "Hero"|} in
   | Error e -> assert_failure e.message
 
 let test_items _ =
-  let input = {|## items
+  let input = {|@scene
+
+## items
 +sword
 -potion|} in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       assert_equal 2 (List.length state.blocks);
       match state.blocks with
       | [ Ast.ItemAdd item1; Ast.ItemRemove item2 ] ->
@@ -79,12 +89,14 @@ let test_items _ =
   | Error e -> assert_failure e.message
 
 let test_directives _ =
-  let input = {|## directives
+  let input = {|@scene
+
+## directives
 @play_sound thunder.mp3
 @scene_end|} in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       match List.hd state.blocks with
       | Some (Ast.Directive { command; params }) ->
           assert_equal "play_sound" command;
@@ -93,12 +105,14 @@ let test_directives _ =
   | Error e -> assert_failure e.message
 
 let test_transitions _ =
-  let input = {|## transitions
+  let input = {|@scene
+
+## transitions
 Some text here.
 -> next_state|} in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       assert_equal 2 (List.length state.blocks);
       match List.nth state.blocks 1 with
       | Some (Ast.Transition target) -> assert_equal "next_state" target
@@ -107,30 +121,40 @@ Some text here.
 
 let test_skill_check _ =
   let input =
-    {|## skill_test
+    {|@scene
+
+## skill_test
 ? perception check DC 15
   => You notice something!
   =| You see nothing unusual.|}
   in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       match List.hd state.blocks with
-      | Some (Ast.SkillCheck { description; success_blocks; failure_blocks }) ->
-          assert_equal "perception check DC 15" description;
+      | Some
+          (Ast.SkillCheck
+             { skill_type; difficulty; description; success_blocks; failure_blocks } ) ->
+          assert_equal "perception" skill_type;
+          assert_equal 15 difficulty;
+          assert_equal "perception check DC 15" description.text;
           assert_bool "Should have success block" (List.length success_blocks > 0);
           assert_bool "Should have failure block" (List.length failure_blocks > 0)
       | _ -> assert_failure "Expected skill check" )
   | Error e -> assert_failure e.message
 
 let test_conditional _ =
-  let input = {|## conditional_test
+  let input =
+    {|@scene
+
+## conditional_test
 [if gold >= 10]
   You can afford it.
-  -> shop|} in
+  -> shop|}
+  in
   match parse_string input with
-  | Ok states -> (
-      let state = List.hd_exn states in
+  | Ok story -> (
+      let state = List.hd_exn story.states in
       match List.hd state.blocks with
       | Some (Ast.Conditional { then_blocks; _ }) ->
           assert_bool "Should have then blocks" (List.length then_blocks > 0)
@@ -139,7 +163,9 @@ let test_conditional _ =
 
 let test_multiple_states _ =
   let input =
-    {|## state1
+    {|@scene
+
+## state1
 First state text.
 
 ## state2
@@ -149,16 +175,18 @@ Second state text.
 Third state text.|}
   in
   match parse_string input with
-  | Ok states ->
-      assert_equal 3 (List.length states);
-      List.iter states ~f:(fun state ->
+  | Ok story ->
+      assert_equal 3 (List.length story.states);
+      List.iter story.states ~f:(fun state ->
           assert_bool "State should have name" (String.length state.name > 0);
           assert_bool "State should have blocks" (List.length state.blocks > 0) )
   | Error e -> assert_failure e.message
 
 let test_complex_scene _ =
   let input =
-    {|## tavern_entrance
+    {|@scene
+
+## tavern_entrance
 
 The tavern is dimly lit.
 
@@ -173,8 +201,8 @@ Bartender: "Welcome!"
 @play_sound ambient_tavern|}
   in
   match parse_string input with
-  | Ok states ->
-      let state = List.hd_exn states in
+  | Ok story ->
+      let state = List.hd_exn story.states in
       assert_equal "tavern_entrance" state.name;
       assert_bool "Should have multiple blocks" (List.length state.blocks >= 5)
   | Error e -> assert_failure e.message

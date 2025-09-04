@@ -17,6 +17,7 @@ let show_token = function
   | AddItem s -> Printf.sprintf "AddItem(%s)" s
   | RemoveItem s -> Printf.sprintf "RemoveItem(%s)" s
   | Speaker s -> Printf.sprintf "Speaker(%s)" s
+  | LocaleKey s -> Printf.sprintf "LocaleKey(%s)" s
   | Newline -> "Newline"
   | Comment s -> Printf.sprintf "Comment(%s)" s
   | Eof -> "Eof"
@@ -37,6 +38,7 @@ let equal_token t1 t2 =
   | AddItem s1, AddItem s2 -> String.equal s1 s2
   | RemoveItem s1, RemoveItem s2 -> String.equal s1 s2
   | Speaker s1, Speaker s2 -> String.equal s1 s2
+  | LocaleKey s1, LocaleKey s2 -> String.equal s1 s2
   | Newline, Newline -> true
   | Comment s1, Comment s2 -> String.equal s1 s2
   | Eof, Eof -> true
