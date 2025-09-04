@@ -3,4 +3,4 @@
 (library
  (public_name narratoric)
  (name narratoric)
- (libraries base stdio))
+ (libraries base stdio unix))

@@ -43,53 +43,53 @@ let equal_token t1 t2 =
   | _ -> false
 
 (* Test helper to compare token lists *)
-let assert_tokens_equal ~ctxt expected actual =
+let assert_tokens_equal expected actual =
   let expected_str = List.map expected ~f:show_token |> String.concat ~sep:", " in
   let actual_str = List.map actual ~f:show_token |> String.concat ~sep:", " in
-  assert_equal ~ctxt
+  assert_equal
     ~printer:(fun x -> x)
     ~msg:"Token lists do not match" expected_str actual_str
     ~cmp:(fun _ _ -> List.equal equal_token expected actual)
 
 let lex_story = Lexer.lex_story
 
-let test_narration ctxt =
+let test_narration _ =
   let input = "This is simple narration text." in
   let expected = [ Text "This is simple narration text."; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_choices ctxt =
+let test_choices _ =
   let input = "* [Enter the tavern] -> tavern_entrance" in
   let expected = [ Choice "Enter the tavern"; Arrow; Text "tavern_entrance"; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_speaker ctxt =
+let test_speaker _ =
   let input = "John: \"Hello, traveler!\"" in
   let expected = [ Speaker "John"; Text "\"Hello, traveler!\""; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_state_markers ctxt =
+let test_state_markers _ =
   let input = "## entrance" in
   let expected = [ StateMarker "entrance"; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_directives ctxt =
+let test_directives _ =
   let input = "@play_sound door_open" in
   let expected = [ Directive ("play_sound", "door_open"); Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_conditions ctxt =
+let test_conditions _ =
   let input = "[if has_item(key)]" in
   let expected = [ Condition "if has_item(key)"; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_skill_checks ctxt =
+let test_skill_checks _ =
   let input =
     {|? perception check DC 15
   => You notice a hidden door
@@ -109,30 +109,30 @@ let test_skill_checks ctxt =
     ]
   in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_variables ctxt =
+let test_variables _ =
   let input = "$gold = 100" in
   let expected = [ VariableSet ("gold", "100"); Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_inventory ctxt =
+let test_inventory _ =
   let input = {|+rusty_sword
 -health_potion|} in
   let expected = [ AddItem "rusty_sword"; Newline; RemoveItem "health_potion"; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_single_line_comments ctxt =
+let test_single_line_comments _ =
   let input = {|(* This is a comment *)
 Some text
 (* Another comment *) More text|} in
   let expected = [ Newline; Text "Some text"; Newline; Text "More text"; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_multi_line_comments ctxt =
+let test_multi_line_comments _ =
   let input =
     {|(* This is a
 multi-line
@@ -143,9 +143,9 @@ Some text
   (* After skipping the multi-line comment, there's still a newline after the comment *)
   let expected = [ Newline; Text "Some text"; Newline; Text "More text"; Eof ] in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_comments_with_tokens ctxt =
+let test_comments_with_tokens _ =
   let input =
     {|## state_name (* comment after state marker *)
 
@@ -180,9 +180,9 @@ The tavern is busy.
     ]
   in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
-let test_complex_scene ctxt =
+let test_complex_scene _ =
   let input =
     {|## tavern_entrance
 
@@ -235,7 +235,7 @@ Bartender: "Welcome, stranger!"
     ]
   in
   let actual = lex_story input in
-  assert_tokens_equal ~ctxt expected actual
+  assert_tokens_equal expected actual
 
 let suite =
   "Story Mode Lexer Tests"

@@ -53,7 +53,7 @@ run: build
 # Run tests
 test: build
 	@echo "Running tests..."
-	@eval `opam env` && dune test
+	@eval `opam env` && dune runtest --force
 
 # Development mode with file watching
 dev:

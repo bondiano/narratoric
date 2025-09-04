@@ -1,5 +1,6 @@
 open Base
 open Stdio
+module Story = Narratoric.Story
 
 type config = {
   source_path : string;
@@ -8,19 +9,48 @@ type config = {
   verbose : bool;
 }
 
-let collect_scenes path =
-  let scenes_dir = path ^ "/scenes" in
-  if Stdlib.Sys.file_exists scenes_dir && Stdlib.Sys.is_directory scenes_dir then
-    Stdlib.Sys.readdir scenes_dir |> Array.to_list
-    |> List.filter ~f:(fun f ->
-           String.is_suffix f ~suffix:".narratoric" || String.is_suffix f ~suffix:".json" )
-  else []
+let collect_story_files path =
+  let files = ref [] in
+  let rec collect_dir dir =
+    if Stdlib.Sys.file_exists dir && Stdlib.Sys.is_directory dir then
+      Stdlib.Sys.readdir dir
+      |> Array.iter ~f:(fun f ->
+             let full_path = dir ^ "/" ^ f in
+             if String.is_suffix f ~suffix:".story" then files := full_path :: !files
+             else if
+               Stdlib.Sys.is_directory full_path
+               && (not (String.equal f "."))
+               && not (String.equal f "..")
+             then collect_dir full_path )
+  in
+  collect_dir path;
+  List.rev !files
 
-let compile_scene scene_file output_dir =
-  (* TODO: Actual scene compilation *)
-  let scene_name = Stdlib.Filename.basename scene_file in
-  printf "  Compiling: %s -> %s/%s\n" scene_name output_dir scene_name;
-  true
+let compile_story_file story_file output_dir =
+  try
+    let content = In_channel.read_all story_file in
+    let tokens = Story.Lexer.lex_story content in
+
+    match Story.Parser.parse tokens with
+    | Ok story_ast ->
+        let base_name =
+          Stdlib.Filename.basename story_file |> Stdlib.Filename.chop_extension
+        in
+        let story_id = String.substr_replace_all base_name ~pattern:"-" ~with_:"_" in
+        let js_code = Story.Codegen.compile_to_js ~story_id story_ast in
+        let output_file = output_dir ^ "/" ^ base_name ^ ".js" in
+
+        Out_channel.write_all output_file ~data:js_code;
+        printf "  ✓ Compiled: %s -> %s\n"
+          (Stdlib.Filename.basename story_file)
+          (Stdlib.Filename.basename output_file);
+        true
+    | Error parse_error ->
+        printf "  ✗ Parse error in %s: %s\n" story_file parse_error.message;
+        false
+  with exn ->
+    printf "  ✗ Compilation error in %s: %s\n" story_file (Exn.to_string exn);
+    false
 
 let run config =
   printf "Building project at: %s\n" config.source_path;
@@ -39,13 +69,13 @@ let run config =
     if not (Stdlib.Sys.file_exists config.output_path) then
       Unix.mkdir config.output_path 0o755;
 
-    (* Collect and compile scenes *)
-    let scenes = collect_scenes config.source_path in
-    printf "Found %d scenes\n" (List.length scenes);
+    (* Collect and compile story files *)
+    let story_files = collect_story_files config.source_path in
+    printf "Found %d .story files\n" (List.length story_files);
 
     let results =
-      List.map scenes ~f:(fun scene ->
-          compile_scene (config.source_path ^ "/scenes/" ^ scene) config.output_path )
+      List.map story_files ~f:(fun story_file ->
+          compile_story_file story_file config.output_path )
     in
 
     let success = List.for_all results ~f:Fn.id in

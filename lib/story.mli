@@ -11,3 +11,6 @@ module Lexer = Lexer
 
 (** Parser for converting tokens to AST *)
 module Parser = Parser
+
+(** JavaScript code generator for Story Mode *)
+module Codegen = Codegen

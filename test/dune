@@ -1,11 +1,27 @@
 (test
  (name test_cli)
+ (modules test_cli)
  (libraries base stdio narratoric narrat_cli cmdliner ounit2))
 
 (test
  (name test_story_lexer)
+ (modules test_story_lexer)
  (libraries base stdio narratoric ounit2))
 
 (test
  (name test_story_parser)
+ (modules test_story_parser)
  (libraries base stdio narratoric ounit2))
+
+(test
+ (name test_codegen_ounit)
+ (modules test_codegen_ounit)
+ (libraries base stdio narratoric ounit2))
+
+(library
+ (name test_codegen_expect)
+ (modules test_codegen_expect)
+ (inline_tests)
+ (libraries base stdio narratoric)
+ (preprocess
+  (pps ppx_inline_test ppx_expect)))
