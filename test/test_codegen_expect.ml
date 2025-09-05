@@ -1351,12 +1351,12 @@ You leave the tavern.
                   content: {
                     text: "The bartender continues polishing glasses."
                   }
+                },
+                {
+                  type: "transition",
+                  target: "tavern_entrance"
                 }
               ]
-            },
-            {
-              type: "transition",
-              target: "tavern_entrance"
             }
           ]
         },

@@ -40,3 +40,11 @@
  (inline_tests)
  (preprocess
   (pps ppx_expect)))
+
+(library
+ (name test_skill_check_continuation)
+ (modules test_skill_check_continuation)
+ (libraries narratoric base stdio)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))

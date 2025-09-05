@@ -287,32 +287,53 @@ let rec parse_skill_check state =
   | _ -> Error (make_error state "Expected skill check")
 
 and parse_skill_check_blocks state skill_type difficulty description =
-  let rec parse_skill_outcomes state success_blocks failure_blocks =
+  let rec parse_outcome_blocks state current_mode success_blocks failure_blocks =
     match current_token state with
-    | Some Lexer.SuccessArrow -> (
-        let state = advance state in
-        match current_token state with
-        | Some (Lexer.Text text) ->
-            let success_blocks =
-              Narration { text; locale_key = None } :: success_blocks
+    | Some Lexer.SuccessArrow ->
+        (* Switch to success mode *)
+        parse_outcome_blocks (advance state) `Success success_blocks failure_blocks
+    | Some Lexer.FailureArrow ->
+        (* Switch to failure mode *)
+        parse_outcome_blocks (advance state) `Failure success_blocks failure_blocks
+    | Some Lexer.Arrow -> (
+        match current_mode with
+        | `None -> parse_outcome_blocks state current_mode success_blocks failure_blocks
+        | _ -> (
+            (* Handle transition in outcome block *)
+            let state = advance state in
+            match current_token state with
+            | Some (Lexer.Text target) ->
+                let transition_block = Transition target in
+                let success_blocks, failure_blocks =
+                  match current_mode with
+                  | `Success -> (transition_block :: success_blocks, failure_blocks)
+                  | `Failure -> (success_blocks, transition_block :: failure_blocks)
+                  | `None -> (success_blocks, failure_blocks)
+                in
+                parse_outcome_blocks (advance state) current_mode success_blocks failure_blocks
+            | _ -> parse_outcome_blocks state current_mode success_blocks failure_blocks ) )
+    | Some (Lexer.Text text) -> (
+        match current_mode with
+        | `None -> parse_outcome_blocks state current_mode success_blocks failure_blocks
+        | _ ->
+            (* Add narration to current mode *)
+            let narration_block = Narration { text; locale_key = None } in
+            let success_blocks, failure_blocks =
+              match current_mode with
+              | `Success -> (narration_block :: success_blocks, failure_blocks)
+              | `Failure -> (success_blocks, narration_block :: failure_blocks)
+              | `None -> (success_blocks, failure_blocks)
             in
-            parse_skill_outcomes (advance state) success_blocks failure_blocks
-        | _ -> parse_skill_outcomes state success_blocks failure_blocks )
-    | Some Lexer.FailureArrow -> (
-        let state = advance state in
-        match current_token state with
-        | Some (Lexer.Text text) ->
-            let failure_blocks =
-              Narration { text; locale_key = None } :: failure_blocks
-            in
-            parse_skill_outcomes (advance state) success_blocks failure_blocks
-        | _ -> parse_skill_outcomes state success_blocks failure_blocks )
+            parse_outcome_blocks (advance state) current_mode success_blocks failure_blocks )
     | Some Lexer.Newline ->
-        parse_skill_outcomes (advance state) success_blocks failure_blocks
-    | _ -> (List.rev success_blocks, List.rev failure_blocks, state)
+        (* Skip newlines *)
+        parse_outcome_blocks (advance state) current_mode success_blocks failure_blocks
+    | _ ->
+        (* End of skill check block *)
+        (List.rev success_blocks, List.rev failure_blocks, state)
   in
 
-  let success_blocks, failure_blocks, state = parse_skill_outcomes state [] [] in
+  let success_blocks, failure_blocks, state = parse_outcome_blocks state `None [] [] in
   Ok
     ( SkillCheck { skill_type; difficulty; description; success_blocks; failure_blocks },
       state )
