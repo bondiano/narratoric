@@ -109,6 +109,8 @@ module BlockTypes = struct
 
   let directive = "directive"
 
+  let notification = "notification"
+
   let transition = "transition"
 end
 
@@ -365,6 +367,12 @@ module AstMapper = struct
             ("command", JsString command);
             ("params", JsString params);
           ]
+    | Notification localizable_text ->
+        JsObject
+          [
+            ("type", JsString "notification");
+            ("content", JsObject (map_localizable_text localizable_text));
+          ]
     | Transition target ->
         JsObject [ ("type", JsString "transition"); ("target", JsString target) ]
 
@@ -497,6 +505,14 @@ module BlockGen = struct
         ("content", js_object (compile_localizable_text_field localizable_text));
       ]
 
+  (** Compile notification block *)
+  let compile_notification localizable_text =
+    js_object
+      [
+        type_pair notification;
+        ("content", js_object (compile_localizable_text_field localizable_text));
+      ]
+
   (** Compile dialogue block *)
   let compile_dialogue speaker localizable_text =
     js_object
@@ -584,6 +600,7 @@ module BlockGen = struct
     | ItemAdd item -> compile_simple_block item_add "item" item
     | ItemRemove item -> compile_simple_block item_remove "item" item
     | Directive { command; params } -> compile_directive command params
+    | Notification text -> compile_notification text
     | Transition target -> compile_transition target
 
   (** Compile list of blocks to JavaScript array *)

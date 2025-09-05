@@ -1,4 +1,5 @@
 (* Simple Story Mode example *)
+@scene
 
 ## tavern_entrance
 

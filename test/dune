@@ -32,3 +32,11 @@
  (inline_tests)
  (preprocess
   (pps ppx_expect)))
+
+(library
+ (name test_notification)
+ (modules test_notification)
+ (libraries narratoric base stdio)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))

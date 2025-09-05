@@ -368,8 +368,20 @@ let rec parse_block state =
       Ok (VariableSet { name; value = Literal (String value) }, advance state)
   | Some (Lexer.AddItem item) -> Ok (ItemAdd item, advance state)
   | Some (Lexer.RemoveItem item) -> Ok (ItemRemove item, advance state)
-  | Some (Lexer.Directive (command, params)) ->
-      Ok (Directive { command; params }, advance state)
+  | Some (Lexer.Directive (command, params)) -> (
+      match command with
+      | "show_notification" -> (
+          (* Parse notification text with possible locale key *)
+          (* Create a temporary lexer state for the params *)
+          let temp_tokens = Lexer.lex_story params in
+          let temp_state = create_parser temp_tokens in
+          match parse_localizable_text temp_state with
+          | Ok (notification_text, _) -> Ok (Notification notification_text, advance state)
+          | Error _ ->
+              (* Fallback: treat params as plain text *)
+              let text = { text = params; locale_key = None } in
+              Ok (Notification text, advance state) )
+      | _ -> Ok (Directive { command; params }, advance state) )
   | Some Lexer.Arrow -> (
       let state = advance state in
       match current_token state with

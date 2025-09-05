@@ -81,6 +81,7 @@ and block =
       command : string;
       params : string;
     }
+  | Notification of localizable_text
   | Transition of string
 
 (** Literal value types:

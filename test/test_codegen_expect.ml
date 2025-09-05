@@ -1123,6 +1123,265 @@ Bartender: %{npc.bartender.secret}
     };
     |}]
 
+let%expect_test "simple_story_example" =
+  let story =
+    {|@scene
+
+## tavern_entrance
+
+The tavern is dimly lit and filled with the smell of ale.
+
+Bartender: "Welcome, stranger! What brings you here?"
+
+* [Order a drink] -> order_drink
+* [Ask about rumors] -> ask_rumors
+* [Leave quietly] -> exit
+
+## order_drink
+
+You order a mug of ale.
+
+[if gold >= 5]
+  Bartender: "That'll be 5 gold pieces."
+  $gold = gold - 5
+  +ale
+  -> drink_received
+
+[if gold < 5]
+  Bartender: "You don't have enough gold!"
+  -> tavern_entrance
+
+## drink_received
+
+You receive your drink and take a sip.
+
+@play_sound gulp.mp3
+
+The ale is surprisingly good!
+
+-> tavern_entrance
+
+## ask_rumors
+
+Bartender: "Well, there's talk of a dragon in the mountains..."
+
+? perception check DC 15
+  => You notice the bartender seems nervous when mentioning the dragon.
+  =| The bartender continues polishing glasses.
+
+-> tavern_entrance
+
+## exit
+
+You leave the tavern.
+
+@scene_end|}
+  in
+  print_story_object story;
+  [%expect
+    {|
+    import { runtime } from "@narratoric/core";
+
+    export default {
+      type: "scene",
+      states: {
+        tavern_entrance: {
+          name: "tavern_entrance",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                text: "The tavern is dimly lit and filled with the smell of ale."
+              }
+            },
+            {
+              type: "dialogue",
+              speaker: "Bartender",
+              content: {
+                text: ""Welcome, stranger! What brings you here?""
+              }
+            },
+            {
+              target: "order_drink",
+              type: "choice",
+              text: {
+                text: "Order a drink"
+              }
+            },
+            {
+              target: "ask_rumors",
+              type: "choice",
+              text: {
+                text: "Ask about rumors"
+              }
+            },
+            {
+              target: "exit",
+              type: "choice",
+              text: {
+                text: "Leave quietly"
+              }
+            }
+          ]
+        },
+        order_drink: {
+          name: "order_drink",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                text: "You order a mug of ale."
+              }
+            },
+            {
+              type: "conditional",
+              condition: {
+                type: "binary",
+                operator: ">=",
+                left: {
+                  type: "variable",
+                  name: "gold"
+                },
+                right: 5
+              },
+              thenBlocks: [
+                {
+                  type: "dialogue",
+                  speaker: "Bartender",
+                  content: {
+                    text: ""That'll be 5 gold pieces.""
+                  }
+                },
+                {
+                  type: "variableSet",
+                  name: "gold",
+                  value: "gold - 5"
+                },
+                {
+                  type: "itemAdd",
+                  item: "ale"
+                },
+                {
+                  type: "transition",
+                  target: "drink_received"
+                },
+                {
+                  type: "conditional",
+                  condition: {
+                    type: "binary",
+                    operator: "<",
+                    left: {
+                      type: "variable",
+                      name: "gold"
+                    },
+                    right: 5
+                  },
+                  thenBlocks: [
+                    {
+                      type: "dialogue",
+                      speaker: "Bartender",
+                      content: {
+                        text: ""You don't have enough gold!""
+                      }
+                    },
+                    {
+                      type: "transition",
+                      target: "tavern_entrance"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        drink_received: {
+          name: "drink_received",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                text: "You receive your drink and take a sip."
+              }
+            },
+            {
+              type: "directive",
+              command: "play_sound",
+              params: "gulp.mp3"
+            },
+            {
+              type: "narration",
+              content: {
+                text: "The ale is surprisingly good!"
+              }
+            },
+            {
+              type: "transition",
+              target: "tavern_entrance"
+            }
+          ]
+        },
+        ask_rumors: {
+          name: "ask_rumors",
+          blocks: [
+            {
+              type: "dialogue",
+              speaker: "Bartender",
+              content: {
+                text: ""Well, there's talk of a dragon in the mountains...""
+              }
+            },
+            {
+              type: "skillCheck",
+              skillType: "perception",
+              difficulty: 15,
+              description: {
+                text: "perception check DC 15"
+              },
+              successBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "You notice the bartender seems nervous when mentioning the dragon."
+                  }
+                }
+              ],
+              failureBlocks: [
+                {
+                  type: "narration",
+                  content: {
+                    text: "The bartender continues polishing glasses."
+                  }
+                }
+              ]
+            },
+            {
+              type: "transition",
+              target: "tavern_entrance"
+            }
+          ]
+        },
+        exit: {
+          name: "exit",
+          blocks: [
+            {
+              type: "narration",
+              content: {
+                text: "You leave the tavern."
+              }
+            },
+            {
+              type: "directive",
+              command: "scene_end",
+              params: ""
+            }
+          ]
+        }
+      },
+      scene: {},
+      runtime
+    };
+    |}]
+
 let%expect_test "manual_ast_conditional" =
   (* Manually create AST to test codegen *)
   let condition_ast =
